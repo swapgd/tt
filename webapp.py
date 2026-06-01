@@ -7,11 +7,16 @@ import sys
 
 sys.path.insert(0, "src")
 
+import json
 import httpx
+from datetime import datetime, timezone
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from usatt_mcp.config import SITE_BASE, API_BASE, TOURNAMENT_RESULT_TYPE_ID
+
+LOGIN_LOG = Path(__file__).parent / "logins.jsonl"
 
 app = FastAPI()
 
@@ -43,10 +48,17 @@ async def login(req: LoginRequest):
             raise HTTPException(status_code=401, detail="Invalid username or password")
 
         jwt_token = client.cookies.get("jwt", "").replace("Bearer ", "")
+        name = f"{data['user']['FirstName']} {data['user']['LastName']}"
+        with LOGIN_LOG.open("a") as f:
+            f.write(json.dumps({
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "name": name,
+                "userId": data["userId"],
+            }) + "\n")
         return {
             "token": jwt_token,
             "playerId": data["user"]["UserSyncId"],
-            "name": f"{data['user']['FirstName']} {data['user']['LastName']}",
+            "name": name,
             "userId": data["userId"],
         }
 
@@ -95,6 +107,25 @@ async def _api_get(token: str, path: str, params: dict) -> dict:
         resp.raise_for_status()
         data = resp.json()
         return data.get("data", data)
+
+
+@app.get("/api/stats")
+async def stats():
+    if not LOGIN_LOG.exists():
+        return {"total_logins": 0, "unique_users": 0, "users": []}
+    entries = [json.loads(line) for line in LOGIN_LOG.read_text().splitlines() if line.strip()]
+    unique = {}
+    for e in entries:
+        uid = e["userId"]
+        if uid not in unique:
+            unique[uid] = {"name": e["name"], "first_seen": e["ts"], "logins": 0}
+        unique[uid]["logins"] += 1
+        unique[uid]["last_seen"] = e["ts"]
+    return {
+        "total_logins": len(entries),
+        "unique_users": len(unique),
+        "users": sorted(unique.values(), key=lambda u: u["first_seen"]),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
