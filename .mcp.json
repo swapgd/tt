@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "usatt": {
+      "type": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["-m", "usatt_mcp.server"],
+      "env": {
+        "USATT_USERNAME": "${USATT_USERNAME}",
+        "USATT_PASSWORD": "${USATT_PASSWORD}"
+      }
+    }
+  }
+}
