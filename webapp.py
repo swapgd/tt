@@ -1,47 +1,100 @@
 """
-USATT Ratings Web App - Mobile-friendly PWA for looking up table tennis ratings.
+USATT Ratings PWA - Mobile-friendly app with per-user authentication.
 Run: .venv/bin/python webapp.py
 """
 
-import asyncio
 import sys
 
 sys.path.insert(0, "src")
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from usatt_mcp.client import USATTClient
+from pydantic import BaseModel
+from usatt_mcp.config import SITE_BASE, API_BASE, TOURNAMENT_RESULT_TYPE_ID
 
 app = FastAPI()
-client = USATTClient()
 
 
-@app.on_event("startup")
-async def startup():
-    await client.login()
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
-@app.on_event("shutdown")
-async def shutdown():
-    await client.close()
+@app.post("/api/login")
+async def login(req: LoginRequest):
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        await client.get(SITE_BASE)
+        resp = await client.post(
+            f"{SITE_BASE}/Account.mvc/AuthenticateLogin",
+            json={
+                "payload": {
+                    "userName": req.username,
+                    "password": req.password,
+                    "rememberMe": "false",
+                    "returnUrl": "",
+                },
+                "paths": [],
+            },
+            headers={"X-Requested-With": "XMLHttpRequest", "Origin": SITE_BASE},
+        )
+        data = resp.json()
+        if data.get("type") != 0:
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+
+        jwt_token = client.cookies.get("jwt", "").replace("Bearer ", "")
+        return {
+            "token": jwt_token,
+            "playerId": data["user"]["UserSyncId"],
+            "name": f"{data['user']['FirstName']} {data['user']['LastName']}",
+            "userId": data["userId"],
+        }
 
 
 @app.get("/api/my-rating")
-async def my_rating():
-    profile = await client.get_my_profile()
-    return profile
+async def my_rating(player_id: str, token: str):
+    return await _api_get(
+        token,
+        "/api/v1/events-results/get-player-profile",
+        {"PlayerId": player_id},
+    )
 
 
 @app.get("/api/search")
-async def search(q: str, page: int = 1):
-    results = await client.search_players(q, page_size=20, page_number=page)
-    return results
+async def search(q: str, token: str, page: int = 1):
+    return await _api_get(
+        token,
+        "/api/v1/events-results/rankings",
+        {
+            "SearchTerm": q,
+            "ResultEventTypeId": TOURNAMENT_RESULT_TYPE_ID,
+            "PageSize": "20",
+            "PageNumber": str(page),
+        },
+    )
 
 
 @app.get("/api/player/{player_id}")
-async def player_detail(player_id: str):
-    profile = await client.get_player_profile(player_id)
-    return profile
+async def player_detail(player_id: str, token: str):
+    return await _api_get(
+        token,
+        "/api/v1/events-results/get-player-profile",
+        {"PlayerId": player_id},
+    )
+
+
+async def _api_get(token: str, path: str, params: dict) -> dict:
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            f"{API_BASE}{path}",
+            params=params,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Session expired")
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("data", data)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -56,8 +109,9 @@ HTML_PAGE = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="USATT">
-    <title>USATT Ratings</title>
+    <meta name="apple-mobile-web-app-title" content="TT Ratings">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%231a1a2e' width='100' height='100' rx='20'/><text y='70' x='15' font-size='60'>🏓</text></svg>">
+    <title>TT Ratings</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -65,7 +119,9 @@ HTML_PAGE = """<!DOCTYPE html>
             background: #1a1a2e;
             color: #eee;
             min-height: 100vh;
+            min-height: 100dvh;
             padding: 16px;
+            padding-top: env(safe-area-inset-top, 16px);
         }
         h1 {
             text-align: center;
@@ -113,7 +169,9 @@ HTML_PAGE = """<!DOCTYPE html>
             border-radius: 12px;
             padding: 14px;
             margin-bottom: 10px;
+            cursor: pointer;
         }
+        .card:active { opacity: 0.8; }
         .card h3 {
             color: #00d4ff;
             font-size: 1rem;
@@ -133,49 +191,193 @@ HTML_PAGE = """<!DOCTYPE html>
             color: #888;
             margin-top: 4px;
         }
-        .loading {
+        .loading { text-align: center; color: #888; padding: 20px; }
+        .empty { text-align: center; color: #666; padding: 40px 20px; }
+        .error { text-align: center; color: #ff6b6b; padding: 20px; }
+        .login-form {
+            max-width: 320px;
+            margin: 60px auto;
+        }
+        .login-form input {
+            display: block;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+        .login-form button {
+            width: 100%;
+            margin-top: 4px;
+        }
+        .login-form .subtitle {
             text-align: center;
             color: #888;
-            padding: 20px;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
         }
-        .empty {
-            text-align: center;
+        .logout-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
             color: #666;
-            padding: 40px 20px;
+            font-size: 0.8rem;
+            padding: 4px 8px;
+        }
+        .user-greeting {
+            text-align: center;
+            color: #888;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
         }
     </style>
 </head>
 <body>
-    <h1>USATT Ratings</h1>
-    <button class="my-btn" onclick="loadMyRating()">My Rating</button>
-    <div class="search-box">
-        <input type="text" id="search" placeholder="Search player name..."
-               onkeydown="if(event.key==='Enter')doSearch()">
-        <button onclick="doSearch()">Go</button>
-    </div>
-    <div id="results"></div>
+    <div id="app"></div>
 
     <script>
-        const results = document.getElementById('results');
+        const app = document.getElementById('app');
+
+        function getSession() {
+            try {
+                const s = localStorage.getItem('usatt_session');
+                return s ? JSON.parse(s) : null;
+            } catch { return null; }
+        }
+
+        function saveSession(data) {
+            localStorage.setItem('usatt_session', JSON.stringify(data));
+        }
+
+        function clearSession() {
+            localStorage.removeItem('usatt_session');
+            render();
+        }
+
+        async function apiFetch(url) {
+            const session = getSession();
+            if (!session) { render(); return null; }
+            const sep = url.includes('?') ? '&' : '?';
+            const resp = await fetch(url + sep + 'token=' + encodeURIComponent(session.token));
+            if (resp.status === 401) {
+                // Try re-login with saved credentials
+                const creds = getSavedCreds();
+                if (creds) {
+                    const ok = await doLogin(creds.username, creds.password, true);
+                    if (ok) {
+                        const session2 = getSession();
+                        const resp2 = await fetch(url + sep + 'token=' + encodeURIComponent(session2.token));
+                        if (resp2.ok) return resp2.json();
+                    }
+                }
+                clearSession();
+                return null;
+            }
+            if (!resp.ok) throw new Error('Request failed');
+            return resp.json();
+        }
+
+        function getSavedCreds() {
+            try {
+                const c = localStorage.getItem('usatt_creds');
+                return c ? JSON.parse(c) : null;
+            } catch { return null; }
+        }
+
+        function saveCreds(username, password) {
+            localStorage.setItem('usatt_creds', JSON.stringify({username, password}));
+        }
+
+        async function doLogin(username, password, silent) {
+            if (!silent) {
+                app.querySelector('.login-form button').textContent = 'Logging in...';
+                app.querySelector('.login-form button').disabled = true;
+            }
+            try {
+                const resp = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password}),
+                });
+                if (!resp.ok) {
+                    if (!silent) {
+                        app.querySelector('.login-form button').textContent = 'Sign In';
+                        app.querySelector('.login-form button').disabled = false;
+                        app.querySelector('.error-msg').textContent = 'Invalid email or password';
+                    }
+                    return false;
+                }
+                const data = await resp.json();
+                saveSession(data);
+                saveCreds(username, password);
+                if (!silent) render();
+                return true;
+            } catch(e) {
+                if (!silent) {
+                    app.querySelector('.login-form button').textContent = 'Sign In';
+                    app.querySelector('.login-form button').disabled = false;
+                    app.querySelector('.error-msg').textContent = 'Connection error';
+                }
+                return false;
+            }
+        }
+
+        function renderLogin() {
+            const creds = getSavedCreds();
+            app.innerHTML = `
+                <div class="login-form">
+                    <h1>🏓 TT Ratings</h1>
+                    <p class="subtitle">Sign in with your USATT account</p>
+                    <input type="email" id="email" placeholder="Email" value="${creds?.username || ''}">
+                    <input type="password" id="password" placeholder="Password" value="${creds?.password || ''}">
+                    <button onclick="handleLogin()">Sign In</button>
+                    <p class="error-msg error" style="margin-top:12px"></p>
+                </div>
+            `;
+        }
+
+        function handleLogin() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            if (!email || !password) return;
+            doLogin(email, password, false);
+        }
+
+        function renderApp() {
+            const session = getSession();
+            app.innerHTML = `
+                <button class="logout-btn" onclick="clearSession()">Logout</button>
+                <h1>🏓 TT Ratings</h1>
+                <p class="user-greeting">Hi, ${session.name}</p>
+                <button class="my-btn" onclick="loadMyRating()">My Rating</button>
+                <div class="search-box">
+                    <input type="text" id="search" placeholder="Search player name..."
+                           onkeydown="if(event.key==='Enter')doSearch()">
+                    <button onclick="doSearch()">Go</button>
+                </div>
+                <div id="results"></div>
+            `;
+        }
 
         async function loadMyRating() {
+            const session = getSession();
+            const results = document.getElementById('results');
             results.innerHTML = '<div class="loading">Loading...</div>';
             try {
-                const res = await fetch('/api/my-rating');
-                const d = await res.json();
-                results.innerHTML = renderProfile(d);
+                const d = await apiFetch('/api/my-rating?player_id=' + session.playerId);
+                if (d) results.innerHTML = renderProfile(d);
             } catch(e) {
-                results.innerHTML = '<div class="empty">Error loading rating</div>';
+                results.innerHTML = '<div class="error">Error loading rating</div>';
             }
         }
 
         async function doSearch() {
             const q = document.getElementById('search').value.trim();
             if (!q) return;
+            const results = document.getElementById('results');
             results.innerHTML = '<div class="loading">Searching...</div>';
             try {
-                const res = await fetch('/api/search?q=' + encodeURIComponent(q));
-                const d = await res.json();
+                const d = await apiFetch('/api/search?q=' + encodeURIComponent(q));
+                if (!d) return;
                 if (!d.players || d.players.length === 0) {
                     results.innerHTML = '<div class="empty">No players found</div>';
                     return;
@@ -193,18 +395,18 @@ HTML_PAGE = """<!DOCTYPE html>
                     </div>
                 `).join('');
             } catch(e) {
-                results.innerHTML = '<div class="empty">Error searching</div>';
+                results.innerHTML = '<div class="error">Error searching</div>';
             }
         }
 
         async function loadPlayer(id) {
+            const results = document.getElementById('results');
             results.innerHTML = '<div class="loading">Loading...</div>';
             try {
-                const res = await fetch('/api/player/' + id);
-                const d = await res.json();
-                results.innerHTML = renderProfile(d);
+                const d = await apiFetch('/api/player/' + id + '?x=1');
+                if (d) results.innerHTML = renderProfile(d);
             } catch(e) {
-                results.innerHTML = '<div class="empty">Error loading player</div>';
+                results.innerHTML = '<div class="error">Error loading player</div>';
             }
         }
 
@@ -229,6 +431,24 @@ HTML_PAGE = """<!DOCTYPE html>
                 </div>
             `;
         }
+
+        function render() {
+            const session = getSession();
+            if (session && session.token) {
+                renderApp();
+            } else {
+                renderLogin();
+            }
+        }
+
+        // Handle Enter key on login
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && document.getElementById('password')) {
+                handleLogin();
+            }
+        });
+
+        render();
     </script>
 </body>
 </html>
