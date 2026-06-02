@@ -102,7 +102,7 @@ async def _api_get(token: str, path: str, params: dict) -> dict:
             params=params,
             headers={"Authorization": f"Bearer {token}"},
         )
-        if resp.status_code == 401:
+        if resp.status_code in (401, 403, 500):
             raise HTTPException(status_code=401, detail="Session expired")
         resp.raise_for_status()
         data = resp.json()
