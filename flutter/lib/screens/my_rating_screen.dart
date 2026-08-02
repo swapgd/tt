@@ -26,7 +26,7 @@ class _MyRatingScreenState extends ConsumerState<MyRatingScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A2E),
       appBar: AppBar(
-        title: const Text('🏓 USATT Ratings'),
+        title: const Text('🏓 Table Tennis Ratings'),
         centerTitle: true,
         backgroundColor: const Color(0xFF1A1A2E),
         foregroundColor: const Color(0xFF00D4FF),

@@ -14,7 +14,7 @@ class TTRatingsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'USATT Ratings',
+      title: 'Table Tennis Ratings',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

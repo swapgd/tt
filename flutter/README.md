@@ -1,17 +1,17 @@
-# tt_ratings
+# Table Tennis Ratings
 
-A new Flutter project.
+An independent mobile app (iOS + Android) for looking up USA Table Tennis player ratings.
+It is not affiliated with or endorsed by USA Table Tennis.
+
+Users sign in with their USA Table Tennis account to view their own tournament and
+league ratings, and to search other players' ratings.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run            # debug on connected device/simulator
+flutter build ios      # iOS release
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+See `CLAUDE.md` for architecture and project structure.

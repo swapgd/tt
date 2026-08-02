@@ -27,7 +27,7 @@ class PlayerCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'USATT# ${profile.memberId}',
+            'Member# ${profile.memberId}',
             style: const TextStyle(color: Color(0xFFEEEEEE), fontSize: 14),
           ),
           const SizedBox(height: 16),

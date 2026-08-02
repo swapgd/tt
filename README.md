@@ -1,6 +1,8 @@
-# USATT Ratings MCP Server
+# Table Tennis Ratings MCP Server
 
-An MCP (Model Context Protocol) server that looks up USA Table Tennis (USATT) player ratings from usatt.justgo.com.
+An MCP (Model Context Protocol) server that looks up USA Table Tennis player ratings from usatt.justgo.com.
+
+Independent project, not affiliated with or endorsed by USA Table Tennis.
 
 ## Tools
 
@@ -43,7 +45,7 @@ export USATT_PASSWORD="your_password"
 ```
 
 Then ask Claude things like:
-- "What's my USATT rating?"
+- "What's my table tennis rating?"
 - "Look up the rating for Zhang Kai"
 - "Search for players named Krish"
 

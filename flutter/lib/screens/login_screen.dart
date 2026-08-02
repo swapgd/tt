@@ -41,7 +41,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  '🏓 USATT Ratings',
+                  '🏓 Table Tennis Ratings',
                   style: TextStyle(
                     color: Color(0xFF00D4FF),
                     fontSize: 28,
@@ -50,7 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Sign in with your USATT account',
+                  'Sign in with your USA Table Tennis account',
                   style: TextStyle(color: Color(0xFF888888), fontSize: 14),
                 ),
                 const SizedBox(height: 32),
@@ -102,6 +102,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     style: const TextStyle(color: Color(0xFFFF6B6B), fontSize: 14),
                   ),
                 ],
+                const SizedBox(height: 32),
+                const Text(
+                  'Not affiliated with or endorsed by USA Table Tennis. '
+                  'Ratings data belongs to their respective owners.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Color(0xFF666666), fontSize: 11),
+                ),
               ],
             ),
           ),
